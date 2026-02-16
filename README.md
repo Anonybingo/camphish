@@ -1,3 +1,6 @@
+THE SCRIPT CAN WORK ON ALL PLATFORMS, WHAT NEEDED IS PYTHON TO BE INSTALLED
+
+
 create folder named "img" to save images, and also install cloudflare
 ALRIGHT!!
 
